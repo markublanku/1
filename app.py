@@ -44,7 +44,7 @@ def handle_errors(func):
         try:
             return func(*args, **kwargs)
         except Exception as e:
-            logger.error(f"Error in {func._name_}: {e}")
+            logger.error(f"Error in {func.__name__}: {e}")  # Fixed here
             return None
     return wrapper
 
@@ -67,13 +67,16 @@ def get_moving_average(pair, period=20):
 @handle_errors
 def place_order(pair, amount, side="buy"):
     with lock:
+        price = fetch_data(pair)
+        if price is None:
+            logger.error(f"Failed to fetch price for {pair}. Cannot place order.")
+            return None
+
         if side == "buy":
-            price = fetch_data(pair)
             order = exchange.create_market_buy_order(pair, amount / price)
             logger.info(f"Bought {amount / price} {pair} at price {price}")
             bought_prices[pair] = price
         else:
-            price = fetch_data(pair)
             order = exchange.create_market_sell_order(pair, amount)
             logger.info(f"Sold {amount} {pair} at price {price}")
             bought_prices.pop(pair, None)
@@ -144,5 +147,5 @@ def status():
             "bought_prices": bought_prices
         }), 200
 
-if __name__ == '_main_':
-    app.run(host='0.0.0.0', port=8080, debug=True)  # Change port as needed
+if __name__ == '__main__':  # Fixed here
+    app.run(host='0.0.0.0', port=8080, debug=True)  # Change port as needed
