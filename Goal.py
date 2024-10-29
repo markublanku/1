@@ -1,11 +1,15 @@
 import ccxt
 import time
+import threading
 from datetime import datetime
 from dotenv import load_dotenv
+from flask import Flask, jsonify
 import os
 
-# Load environment variables from .env file
+# Load environment variables
 load_dotenv()
+
+app = Flask(__name__)
 
 # Set up exchange (Binance in this case) using environment variables
 exchange = ccxt.binance({
@@ -22,8 +26,10 @@ TIME_INTERVAL = '1m'  # e.g., '1m', '5m', '1h', etc.
 SLEEP_INTERVAL = 60  # seconds between each loop cycle
 SELL_PROFIT_MARGIN = 1.05  # 5% above buy price
 
-# Dictionary to track buying prices for each pair
+# Bot state
 bought_prices = {}
+bot_active = False
+bot_thread = None
 
 # Error-handling decorator
 def handle_errors(func):
@@ -46,7 +52,7 @@ def fetch_data(pair, data_type="ticker", period=20):
         return ticker['last']
     elif data_type == "balance":
         balance = exchange.fetch_balance()
-        return balance['total'].get(pair.split('/')[0], 0)
+        return balance['total'].get('USDT', 0)  # Change to fetch USDT balance
 
 # Helper function to get moving average
 def get_moving_average(pair, period=20):
@@ -70,12 +76,13 @@ def place_order(pair, amount, side="buy"):
 
 # Main function to monitor prices and trade
 def monitor_and_trade():
+    global bot_active
     baseline_prices = {pair: get_moving_average(pair) for pair in TARGET_PAIRS}
     usdt_per_pair = INVESTMENT / len(TARGET_PAIRS)  # Split investment per pair
 
     print(f"Initial baseline prices: {baseline_prices}")
 
-    while True:
+    while bot_active:
         for pair in TARGET_PAIRS:
             current_price = fetch_data(pair)
             if current_price is None:
@@ -98,5 +105,33 @@ def monitor_and_trade():
 
         time.sleep(SLEEP_INTERVAL)  # Pause before the next check
 
-# Run the bot
-monitor_and_trade()
+@app.route('/start', methods=['GET'])
+def start_bot():
+    global bot_active, bot_thread
+    if not bot_active:
+        bot_active = True
+        bot_thread = threading.Thread(target=monitor_and_trade)
+        bot_thread.start()
+        return jsonify({"status": "Bot started"}), 200
+    else:
+        return jsonify({"status": "Bot is already running"}), 400
+
+@app.route('/stop', methods=['GET'])
+def stop_bot():
+    global bot_active, bot_thread
+    if bot_active:
+        bot_active = False
+        bot_thread.join()  # Wait for thread to finish
+        return jsonify({"status": "Bot stopped"}), 200
+    else:
+        return jsonify({"status": "Bot is not running"}), 400
+
+@app.route('/status', methods=['GET'])
+def status():
+    return jsonify({
+        "bot_active": bot_active,
+        "bought_prices": bought_prices
+    }), 200
+
+if __name__ == '__main__':
+    app.run(debug=True)
