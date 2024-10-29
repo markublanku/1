@@ -105,6 +105,15 @@ def monitor_and_trade():
 
         time.sleep(SLEEP_INTERVAL)  # Pause before the next check
 
+# Route for the home page
+@app.route('/')
+def home():
+    return jsonify({"message": "Welcome to the trading bot API!"}), 200
+
+@app.route('/favicon.ico')
+def favicon():
+    return '', 204  # No content
+
 @app.route('/start', methods=['GET'])
 def start_bot():
     global bot_active, bot_thread
